@@ -233,18 +233,18 @@ public class GertecPrinter {
         int fontSize = tamanho;
 
         try {
-            bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, 30, 0, "========================");
+            bufferSeparador();
             prntr.DrawBlankLine(1);
-            bufferText(align, bold, false, false, fontSize, 0, dados);
+            bufferQuebrado(align, bold, fontSize, dados);
             prntr.DrawBlankLine(1);
 
             if (senha != null && !senha.isEmpty()) {
-                bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, 30, 0, "========================");
-                bufferText(align, true, false, false, 24, 0, senha);
+                bufferSeparador();
+                bufferQuebrado(align, true, FONTE_DESTAQUE, senha);
             }
 
-            bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, 30, 0, "========================");
-            bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, 20, 0, data);
+            bufferSeparador();
+            bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, FONTE_NORMAL, 0, data);
             prntr.DrawBlankLine(1);
             bufferRodape();
             prntr.Output();
@@ -270,12 +270,12 @@ public class GertecPrinter {
         }
 
         try {
-            bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 14, 0, "================================");
+            bufferSeparador();
             prntr.DrawBlankLine(1);
-            bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 20, 0, "PEDIDO #" + safeString(orderNumber));
+            bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, FONTE_TITULO, 0, "PEDIDO #" + safeString(orderNumber));
 
             String now = new SimpleDateFormat("dd/MM/yyyy HH:mm", new Locale("pt", "BR")).format(new Date());
-            bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, 14, 0, now);
+            bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, FONTE_NORMAL, 0, now);
             prntr.DrawBlankLine(1);
 
             double total = 0.0;
@@ -283,13 +283,13 @@ public class GertecPrinter {
                 for (int i = 0; i < itemsForCart.size(); i++) {
                     Map item = itemsForCart.get(i);
                     String description = removerAcentos(safeString(item.get("description")).toUpperCase());
-                    bufferText(GEDI_PRNTR_e_Alignment.LEFT, true, false, false, 14, 0, (i + 1) + ". " + description);
+                    bufferQuebrado(GEDI_PRNTR_e_Alignment.LEFT, true, FONTE_ITEM, (i + 1) + ". " + description);
 
                     Number valueNumber = (Number) item.get("value");
                     double value = valueNumber != null ? valueNumber.doubleValue() : 0.0;
                     total += value;
-                    bufferText(GEDI_PRNTR_e_Alignment.LEFT, true, false, false, 14, 0,
-                            String.format(Locale.US, "   R$ %.2f", value));
+                    bufferText(GEDI_PRNTR_e_Alignment.LEFT, false, false, false, FONTE_NORMAL, 0,
+                            String.format(new Locale("pt", "BR"), "   R$ %.2f", value));
 
                     String category = safeString(item.get("category")).toLowerCase();
                     boolean isBeverage = category.contains("bebida");
@@ -298,7 +298,7 @@ public class GertecPrinter {
                             : item.get("removedIngredients"));
                     if (itemsToShow != null && !itemsToShow.isEmpty()) {
                         String label = isBeverage ? "Escolha:" : "Remover:";
-                        bufferText(GEDI_PRNTR_e_Alignment.LEFT, true, false, false, 14, 0,
+                        bufferQuebrado(GEDI_PRNTR_e_Alignment.LEFT, true, FONTE_NORMAL,
                                 "   " + label + " " + juntarItens(itemsToShow));
                     }
                     prntr.DrawBlankLine(1);
@@ -306,15 +306,15 @@ public class GertecPrinter {
             }
 
             prntr.DrawBlankLine(1);
-            bufferText(GEDI_PRNTR_e_Alignment.LEFT, true, false, false, 20, 0,
-                    String.format(Locale.US, "TOTAL: R$ %.2f", total));
+            bufferText(GEDI_PRNTR_e_Alignment.LEFT, true, false, false, FONTE_DESTAQUE, 0,
+                    String.format(new Locale("pt", "BR"), "TOTAL: R$ %.2f", total));
             prntr.DrawBlankLine(1);
-            bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 14, 0, "================================");
+            bufferSeparador();
             prntr.DrawBlankLine(1);
-            bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 14, 0,
+            bufferQuebrado(GEDI_PRNTR_e_Alignment.CENTER, true, FONTE_ITEM,
                     removerAcentos(takeHome ? "PARA VIAGEM" : "PARA CONSUMIR NO LOCAL"));
             prntr.DrawBlankLine(1);
-            bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 14, 0, "================================");
+            bufferSeparador();
             prntr.DrawBlankLine(2);
             bufferRodape();
             prntr.Output();
@@ -328,6 +328,42 @@ public class GertecPrinter {
     // endregion
 
     // region ─── Private Helpers ───────────────────────────────────────────────
+
+    // Papel de 58mm na GPOS800/G800: 384 pontos de largura. Tamanhos em pontos (Paint.setTextSize).
+    private static final int LARGURA_PAPEL = 384;
+    private static final int FONTE_TITULO = 40;
+    private static final int FONTE_DESTAQUE = 32;
+    private static final int FONTE_ITEM = 28;
+    private static final int FONTE_NORMAL = 24;
+    private static final int FONTE_RODAPE = 20;
+
+    /** Linha de "=" ocupando a largura do papel */
+    private void bufferSeparador() throws GediException {
+        Paint paint = new Paint();
+        paint.setTextSize(FONTE_NORMAL);
+        int n = (int) (LARGURA_PAPEL / paint.measureText("=")) - 1;
+        StringBuilder linha = new StringBuilder();
+        for (int i = 0; i < n; i++) linha.append("=");
+        bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, FONTE_NORMAL, 0, linha.toString());
+    }
+
+    /** Texto com quebra de linha por palavra, para não cortar no fim do papel com fonte grande */
+    private void bufferQuebrado(GEDI_PRNTR_e_Alignment align, boolean bold, int fontSize, String text) throws GediException {
+        Paint paint = new Paint();
+        paint.setTextSize(fontSize);
+        paint.setFakeBoldText(bold);
+        StringBuilder linha = new StringBuilder();
+        for (String palavra : safeString(text).split(" ")) {
+            String tentativa = linha.length() == 0 ? palavra : linha + " " + palavra;
+            if (linha.length() > 0 && paint.measureText(tentativa) > LARGURA_PAPEL) {
+                bufferText(align, bold, false, false, fontSize, 0, linha.toString());
+                linha = new StringBuilder(palavra);
+            } else {
+                linha = new StringBuilder(tentativa);
+            }
+        }
+        if (linha.length() > 0) bufferText(align, bold, false, false, fontSize, 0, linha.toString());
+    }
 
     private void bufferText(GEDI_PRNTR_e_Alignment align, boolean bold, boolean italic,
                             boolean underline, int fontSize, int lineSpace, String text) throws GediException {
@@ -346,8 +382,8 @@ public class GertecPrinter {
 
     private void bufferRodape() throws GediException {
         String version = obterVersaoApp();
-        bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 20, 0, "@eventflow v" + version);
-        bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 20, 0, "powered by @marraia");
+        bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, FONTE_RODAPE, 0, "@eventflow v" + version);
+        bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, FONTE_RODAPE, 0, "powered by @marraia");
         prntr.DrawBlankLine(5);
     }
 
