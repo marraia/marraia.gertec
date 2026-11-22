@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Paint;
+import android.graphics.Typeface;
 import android.util.Log;
 
 import java.io.InputStream;
@@ -287,7 +288,7 @@ public class GertecPrinter {
                     double value = valueNumber != null ? valueNumber.doubleValue() : 0.0;
                     total += value;
                     // Nome à esquerda e valor no fim da linha; observações logo abaixo
-                    bufferEsquerdaDireita(true, FONTE_ITEM, (i + 1) + ". " + description,
+                    bufferEsquerdaDireita(true, FONTE_LINHA_ITEM, (i + 1) + ". " + description,
                             String.format(new Locale("pt", "BR"), "R$ %.2f", value));
 
                     String category = safeString(item.get("category")).toLowerCase();
@@ -334,46 +335,67 @@ public class GertecPrinter {
     private static final int FONTE_DESTAQUE = 32;
     private static final int FONTE_ITEM = 28;
     private static final int FONTE_NORMAL = 24;
+    // Linha de item (monoespaçada): ~26 colunas, cabe "1. NOME DO ITEM   R$ 15,00"
+    private static final int FONTE_LINHA_ITEM = 24;
     private static final int FONTE_RODAPE = 20;
     // DrawBlankLine(n) desenha n PIXELS em branco (8 px ≈ 1 mm)
     private static final int ESPACO = 12;
     private static final int AVANCO_CORTE = 160; // ≈ 20 mm: da cabeça de impressão até a serrilha
 
     /**
-     * Texto à esquerda e valor encostado à direita na mesma linha (preenche com espaços).
-     * Se o texto for longo, quebra por palavra e o valor fica na última linha (ou numa linha própria).
+     * Linha "nome ........ valor" em fonte de largura fixa (monoespaçada): os valores ficam
+     * sempre encostados à direita e alinhados em coluna, item a item.
+     * O valor vai na PRIMEIRA linha; se o nome não couber ao lado dele, continua nas linhas
+     * de baixo (recuadas), sem empurrar o valor para outra linha.
      */
     private void bufferEsquerdaDireita(boolean bold, int fontSize, String left, String right) throws GediException {
-        Paint paint = new Paint();
-        paint.setTextSize(fontSize);
-        paint.setFakeBoldText(bold);
-        float espacoValor = paint.measureText(" " + right);
+        Paint paint = monoPaint(bold, fontSize);
+        int colunas = (int) (LARGURA_PAPEL / paint.measureText("0"));
+        int larguraNome = Math.max(4, colunas - right.length() - 1);
 
-        // quebra o texto da esquerda deixando lugar para o valor na última linha
+        java.util.List<String> linhas = quebrarPorColunas(safeString(left).trim(), larguraNome, colunas - 3);
+        StringBuilder primeira = new StringBuilder(linhas.get(0));
+        while (primeira.length() < colunas - right.length()) primeira.append(' ');
+        bufferMono(bold, fontSize, primeira + right);
+        for (int i = 1; i < linhas.size(); i++) bufferMono(bold, fontSize, "   " + linhas.get(i));
+    }
+
+    /** Quebra por palavra: a 1ª linha com até [primeira] caracteres, as demais com até [demais] */
+    private java.util.List<String> quebrarPorColunas(String texto, int primeira, int demais) {
         java.util.List<String> linhas = new java.util.ArrayList<>();
         StringBuilder linha = new StringBuilder();
-        for (String palavra : safeString(left).trim().split("\\s+")) {
+        for (String palavra : texto.split("\\s+")) {
+            int limite = linhas.isEmpty() ? primeira : demais;
+            // palavra maior que a linha inteira: corta no limite
+            while (palavra.length() > limite) {
+                if (linha.length() > 0) { linhas.add(linha.toString()); linha = new StringBuilder(); limite = demais; }
+                linhas.add(palavra.substring(0, limite));
+                palavra = palavra.substring(limite);
+                limite = demais;
+            }
             String tentativa = linha.length() == 0 ? palavra : linha + " " + palavra;
-            if (linha.length() > 0 && paint.measureText(tentativa) > LARGURA_PAPEL) {
+            if (tentativa.length() > limite) {
                 linhas.add(linha.toString());
                 linha = new StringBuilder(palavra);
             } else {
                 linha = new StringBuilder(tentativa);
             }
         }
-        linhas.add(linha.toString());
+        if (linha.length() > 0 || linhas.isEmpty()) linhas.add(linha.toString());
+        return linhas;
+    }
 
-        String ultima = linhas.remove(linhas.size() - 1);
-        for (String l : linhas) bufferText(GEDI_PRNTR_e_Alignment.LEFT, bold, false, false, fontSize, 0, l);
+    private Paint monoPaint(boolean bold, int fontSize) {
+        Paint paint = new Paint();
+        paint.setTypeface(Typeface.MONOSPACE);
+        paint.setTextSize(fontSize);
+        paint.setFakeBoldText(bold);
+        paint.setTextAlign(Paint.Align.LEFT);
+        return paint;
+    }
 
-        if (paint.measureText(ultima) + espacoValor > LARGURA_PAPEL) {
-            bufferText(GEDI_PRNTR_e_Alignment.LEFT, bold, false, false, fontSize, 0, ultima);
-            bufferText(GEDI_PRNTR_e_Alignment.RIGHT, bold, false, false, fontSize, 0, right);
-            return;
-        }
-        StringBuilder junta = new StringBuilder(ultima).append(" ");
-        while (paint.measureText(junta + " " + right) <= LARGURA_PAPEL) junta.append(" ");
-        bufferText(GEDI_PRNTR_e_Alignment.LEFT, bold, false, false, fontSize, 0, junta + right);
+    private void bufferMono(boolean bold, int fontSize, String text) throws GediException {
+        prntr.DrawStringExt(new GEDI_PRNTR_st_StringConfig(monoPaint(bold, fontSize), 0, 0), text);
     }
 
     /** Linha de "=" ocupando a largura do papel */
