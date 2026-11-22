@@ -3,6 +3,7 @@ package br.com.marraia.gertec_tsg810_printer;
 import android.app.Activity;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.graphics.Paint;
 import android.util.Log;
 
 import java.io.InputStream;
@@ -15,29 +16,33 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-import br.com.gertec.easylayer.printer.Alignment;
-import br.com.gertec.easylayer.printer.BarcodeFormat;
-import br.com.gertec.easylayer.printer.BarcodeType;
-import br.com.gertec.easylayer.printer.PrintConfig;
-import br.com.gertec.easylayer.printer.Printer;
-import br.com.gertec.easylayer.printer.PrinterError;
-import br.com.gertec.easylayer.printer.PrinterException;
-import br.com.gertec.easylayer.printer.PrinterUtils;
-import br.com.gertec.easylayer.printer.Status;
-import br.com.gertec.easylayer.printer.TextFormat;
+import br.com.gertec.gedi.GEDI;
+import br.com.gertec.gedi.enums.GEDI_PRNTR_e_Alignment;
+import br.com.gertec.gedi.enums.GEDI_PRNTR_e_BarCodeType;
+import br.com.gertec.gedi.enums.GEDI_PRNTR_e_Status;
+import br.com.gertec.gedi.exceptions.GediException;
+import br.com.gertec.gedi.interfaces.IGEDI;
+import br.com.gertec.gedi.interfaces.IPRNTR;
+import br.com.gertec.gedi.structs.GEDI_PRNTR_st_BarCodeConfig;
+import br.com.gertec.gedi.structs.GEDI_PRNTR_st_PictureConfig;
+import br.com.gertec.gedi.structs.GEDI_PRNTR_st_StringConfig;
 
-public class GertecPrinter implements Printer.Listener {
+public class GertecPrinter {
 
     private static final String TAG = "gertec_tsg810";
 
     private final Activity activity;
-    private final Printer printer;
-    private final PrinterUtils printerUtils;
+    private final IPRNTR prntr;
 
     public GertecPrinter(Activity activity) {
         this.activity = activity;
-        this.printer = Printer.getInstance(activity, this);
-        this.printerUtils = printer.getPrinterUtils();
+        IGEDI gedi = GEDI.getInstance(activity);
+        this.prntr = gedi.getPRNTR();
+        try {
+            this.prntr.Init();
+        } catch (GediException e) {
+            Log.e(TAG, "printer Init error", e);
+        }
     }
 
     // region ─── Text ──────────────────────────────────────────────────────────
@@ -51,17 +56,14 @@ public class GertecPrinter implements Printer.Listener {
         int fontSize = (Integer) map.get("fontSize");
         int lineSpacing = (Integer) map.get("lineSpacing");
 
-        TextFormat tf = new TextFormat();
-        tf.setAlignment(toAlignment(alignValue));
-        tf.setBold(bold);
-        tf.setItalic(italic);
-        tf.setUnderscore(underline);
-        tf.setFontSize(fontSize);
-        if (lineSpacing > 0) {
-            tf.setLineSpacing(lineSpacing);
+        try {
+            bufferText(toAlignment(alignValue), bold, italic, underline, fontSize, lineSpacing, text);
+            prntr.Output();
+            return 0;
+        } catch (GediException e) {
+            Log.e(TAG, "imprimirTexto error", e);
+            return -1;
         }
-
-        return printer.printText(tf, text);
     }
 
     // endregion
@@ -69,7 +71,14 @@ public class GertecPrinter implements Printer.Listener {
     // region ─── Feed ──────────────────────────────────────────────────────────
 
     public int avancarPapel(int lines) {
-        return printer.scrollPaper(lines);
+        try {
+            prntr.DrawBlankLine(lines);
+            prntr.Output();
+            return 0;
+        } catch (GediException e) {
+            Log.e(TAG, "avancarPapel error", e);
+            return -1;
+        }
     }
 
     // endregion
@@ -81,13 +90,16 @@ public class GertecPrinter implements Printer.Listener {
         String typeStr = (String) map.get("type");
         String sizeStr = (String) map.get("size");
 
-        BarcodeType barcodeType = toBarcodeType(typeStr);
-        BarcodeFormat.Size barcodeSize = toBarcodeSize(sizeStr);
-
-        BarcodeFormat format = new BarcodeFormat(barcodeType);
-        format.setSize(barcodeSize);
-
-        return printer.printBarcode(format, data);
+        try {
+            GEDI_PRNTR_st_BarCodeConfig config = new GEDI_PRNTR_st_BarCodeConfig(
+                    toBarcodeType(typeStr), toBarcodeHeight(sizeStr), toBarcodeWidth(sizeStr));
+            prntr.DrawBarCode(config, data);
+            prntr.Output();
+            return 0;
+        } catch (GediException e) {
+            Log.e(TAG, "imprimirCodigoBarras error", e);
+            return -1;
+        }
     }
 
     // endregion
@@ -99,7 +111,6 @@ public class GertecPrinter implements Printer.Listener {
         int width = (Integer) map.get("width");
         int height = (Integer) map.get("height");
         int alignValue = (Integer) map.get("align");
-        boolean autoResize = Boolean.TRUE.equals(map.get("autoResize"));
 
         Bitmap bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.length);
         if (bitmap == null) {
@@ -108,16 +119,12 @@ public class GertecPrinter implements Printer.Listener {
         }
 
         try {
-            if (autoResize) {
-                return printer.printImageAutoResize(bitmap);
-            } else {
-                PrintConfig config = new PrintConfig();
-                if (width > 0) config.setWidth(width);
-                if (height > 0) config.setHeight(height);
-                config.setAlignment(toAlignment(alignValue));
-                return printer.printImage(config, bitmap);
-            }
-        } catch (PrinterException e) {
+            GEDI_PRNTR_st_PictureConfig config = new GEDI_PRNTR_st_PictureConfig(
+                    toAlignment(alignValue), 0, width > 0 ? width : 0, height > 0 ? height : 0);
+            prntr.DrawPictureExt(config, bitmap);
+            prntr.Output();
+            return 0;
+        } catch (GediException e) {
             Log.e(TAG, "imprimirImagemBytes error", e);
             return -1;
         }
@@ -145,29 +152,26 @@ public class GertecPrinter implements Printer.Listener {
                 Log.e(TAG, "imprimirImagemUrl bitmap decode failed");
                 return -1;
             }
-            return printer.printImageAutoResize(bitmap);
+            GEDI_PRNTR_st_PictureConfig config = new GEDI_PRNTR_st_PictureConfig(GEDI_PRNTR_e_Alignment.CENTER);
+            prntr.DrawPictureExt(config, bitmap);
+            prntr.Output();
+            return 0;
         } catch (Exception e) {
             Log.e(TAG, "imprimirImagemUrl failed", e);
             return -1;
         } finally {
-            try {
-                if (inputStream != null) inputStream.close();
-            } catch (Exception ignored) {}
+            try { if (inputStream != null) inputStream.close(); } catch (Exception ignored) {}
             if (connection != null) connection.disconnect();
         }
     }
 
     // endregion
 
-    // region ─── HTML ──────────────────────────────────────────────────────────
+    // region ─── HTML (not supported in GEDI) ──────────────────────────────────
 
     public int imprimirHtml(String html) {
-        try {
-            return printer.printHtml(activity, html);
-        } catch (PrinterException e) {
-            Log.e(TAG, "imprimirHtml error", e);
-            return -1;
-        }
+        Log.w(TAG, "imprimirHtml: not supported in GEDI");
+        return -1;
     }
 
     // endregion
@@ -176,9 +180,9 @@ public class GertecPrinter implements Printer.Listener {
 
     public int obterStatus() {
         try {
-            Status status = printer.getStatus();
-            return status.getCode();
-        } catch (PrinterException e) {
+            GEDI_PRNTR_e_Status status = prntr.Status();
+            return status.getValue();
+        } catch (GediException e) {
             Log.e(TAG, "obterStatus error", e);
             return -1;
         }
@@ -186,8 +190,8 @@ public class GertecPrinter implements Printer.Listener {
 
     public int obterUsoPapel() {
         try {
-            return printer.getPaperUsage();
-        } catch (PrinterException e) {
+            return prntr.GetPaperUsage();
+        } catch (GediException e) {
             Log.e(TAG, "obterUsoPapel error", e);
             return -1;
         }
@@ -195,9 +199,9 @@ public class GertecPrinter implements Printer.Listener {
 
     public int resetarUsoPapel() {
         try {
-            printer.resetPaperUsage();
+            prntr.ResetPaperUsage();
             return 0;
-        } catch (PrinterException e) {
+        } catch (GediException e) {
             Log.e(TAG, "resetarUsoPapel error", e);
             return -1;
         }
@@ -219,37 +223,36 @@ public class GertecPrinter implements Printer.Listener {
         Log.d(TAG, "imprimirPedido dados=" + dados);
 
         if (imageUrl != null && !imageUrl.isEmpty()) {
-            int imageResult = imprimirImagemUrl(imageUrl);
-            Log.d(TAG, "imprimirPedido imageResult=" + imageResult);
-            if (imageResult != 0) {
-                return imageResult;
-            }
+            int result = imprimirImagemUrl(imageUrl);
+            Log.d(TAG, "imprimirPedido imageResult=" + result);
+            if (result != 0) return result;
         }
 
-        Alignment alignment = toAlignment(posicao);
+        GEDI_PRNTR_e_Alignment align = toAlignment(posicao);
         boolean bold = stilo == 8;
-        int fontSize = tamanhoToFontSize(tamanho);
+        int fontSize = tamanho;
 
-        TextFormat separatorFmt = buildTextFormat(Alignment.CENTER, false, 14);
-        TextFormat contentFmt = buildTextFormat(alignment, bold, fontSize);
-        TextFormat boldSmallFmt = buildTextFormat(alignment, true, 14);
-        TextFormat centerSmallFmt = buildTextFormat(Alignment.CENTER, false, 14);
+        try {
+            bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, 30, 0, "========================");
+            prntr.DrawBlankLine(1);
+            bufferText(align, bold, false, false, fontSize, 0, dados);
+            prntr.DrawBlankLine(1);
 
-        printer.printText(separatorFmt, "================================");
-        printer.scrollPaper(1);
-        printer.printText(contentFmt, dados);
-        printer.scrollPaper(1);
+            if (senha != null && !senha.isEmpty()) {
+                bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, 30, 0, "========================");
+                bufferText(align, true, false, false, 24, 0, senha);
+            }
 
-        if (senha != null && !senha.isEmpty()) {
-            printer.printText(separatorFmt, "================================");
-            printer.printText(boldSmallFmt, senha);
+            bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, 30, 0, "========================");
+            bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, 20, 0, data);
+            prntr.DrawBlankLine(1);
+            bufferRodape();
+            prntr.Output();
+            return 0;
+        } catch (GediException e) {
+            Log.e(TAG, "imprimirPedido error", e);
+            return -1;
         }
-
-        printer.printText(separatorFmt, "================================");
-        printer.printText(centerSmallFmt, data);
-        printer.scrollPaper(1);
-
-        return imprimirRodape();
     }
 
     public int imprimirPedidoConsolidado(Map params) {
@@ -261,102 +264,98 @@ public class GertecPrinter implements Printer.Listener {
         Log.d(TAG, "imprimirPedidoConsolidado orderNumber=" + orderNumber + " takeHome=" + takeHome);
 
         if (imageUrl != null && !imageUrl.isEmpty()) {
-            int imageResult = imprimirImagemUrl(imageUrl);
-            Log.d(TAG, "imprimirPedidoConsolidado imageResult=" + imageResult);
-            if (imageResult != 0) {
-                return imageResult;
-            }
+            int result = imprimirImagemUrl(imageUrl);
+            Log.d(TAG, "imprimirPedidoConsolidado imageResult=" + result);
+            if (result != 0) return result;
         }
 
-        TextFormat separatorFmt = buildTextFormat(Alignment.CENTER, true, 14);
-        TextFormat headerFmt = buildTextFormat(Alignment.CENTER, true, 20);
-        TextFormat dateFmt = buildTextFormat(Alignment.CENTER, false, 14);
-        TextFormat itemTitleFmt = buildTextFormat(Alignment.LEFT, true, 14);
-        TextFormat itemValueFmt = buildTextFormat(Alignment.LEFT, true, 14);
-        TextFormat totalFmt = buildTextFormat(Alignment.LEFT, true, 20);
-        TextFormat deliveryFmt = buildTextFormat(Alignment.CENTER, true, 14);
+        try {
+            bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 14, 0, "================================");
+            prntr.DrawBlankLine(1);
+            bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 20, 0, "PEDIDO #" + safeString(orderNumber));
 
-        printer.printText(separatorFmt, "================================");
-        printer.scrollPaper(1);
+            String now = new SimpleDateFormat("dd/MM/yyyy HH:mm", new Locale("pt", "BR")).format(new Date());
+            bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, 14, 0, now);
+            prntr.DrawBlankLine(1);
 
-        printer.printText(headerFmt, "PEDIDO #" + safeString(orderNumber));
+            double total = 0.0;
+            if (itemsForCart != null) {
+                for (int i = 0; i < itemsForCart.size(); i++) {
+                    Map item = itemsForCart.get(i);
+                    String description = removerAcentos(safeString(item.get("description")).toUpperCase());
+                    bufferText(GEDI_PRNTR_e_Alignment.LEFT, true, false, false, 14, 0, (i + 1) + ". " + description);
 
-        String now = new SimpleDateFormat("dd/MM/yyyy HH:mm", new Locale("pt", "BR")).format(new Date());
-        printer.printText(dateFmt, now);
-        printer.scrollPaper(1);
+                    Number valueNumber = (Number) item.get("value");
+                    double value = valueNumber != null ? valueNumber.doubleValue() : 0.0;
+                    total += value;
+                    bufferText(GEDI_PRNTR_e_Alignment.LEFT, true, false, false, 14, 0,
+                            String.format(Locale.US, "   R$ %.2f", value));
 
-        double total = 0.0;
-        if (itemsForCart != null) {
-            for (int i = 0; i < itemsForCart.size(); i++) {
-                Map item = itemsForCart.get(i);
-                String description = removerAcentos(safeString(item.get("description")).toUpperCase());
-                printer.printText(itemTitleFmt, (i + 1) + ". " + description);
-
-                Number valueNumber = (Number) item.get("value");
-                double value = valueNumber != null ? valueNumber.doubleValue() : 0.0;
-                total += value;
-                String valueText = String.format(Locale.US, "   R$ %.2f", value);
-                printer.printText(itemValueFmt, valueText);
-
-                String category = safeString(item.get("category")).toLowerCase();
-                boolean isBeverage = category.contains("bebida");
-                List itemsToShow = (List) (isBeverage ? item.get("selectedIngredients") : item.get("removedIngredients"));
-                if (itemsToShow != null && !itemsToShow.isEmpty()) {
-                    String ingredientLabel = isBeverage ? "Escolha:" : "Remover:";
-                    String cleanedItems = juntarItens(itemsToShow);
-                    printer.printText(itemValueFmt, "   " + ingredientLabel + " " + cleanedItems);
+                    String category = safeString(item.get("category")).toLowerCase();
+                    boolean isBeverage = category.contains("bebida");
+                    List itemsToShow = (List) (isBeverage
+                            ? item.get("selectedIngredients")
+                            : item.get("removedIngredients"));
+                    if (itemsToShow != null && !itemsToShow.isEmpty()) {
+                        String label = isBeverage ? "Escolha:" : "Remover:";
+                        bufferText(GEDI_PRNTR_e_Alignment.LEFT, true, false, false, 14, 0,
+                                "   " + label + " " + juntarItens(itemsToShow));
+                    }
+                    prntr.DrawBlankLine(1);
                 }
-
-                printer.scrollPaper(1);
             }
+
+            prntr.DrawBlankLine(1);
+            bufferText(GEDI_PRNTR_e_Alignment.LEFT, true, false, false, 20, 0,
+                    String.format(Locale.US, "TOTAL: R$ %.2f", total));
+            prntr.DrawBlankLine(1);
+            bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 14, 0, "================================");
+            prntr.DrawBlankLine(1);
+            bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 14, 0,
+                    removerAcentos(takeHome ? "PARA VIAGEM" : "PARA CONSUMIR NO LOCAL"));
+            prntr.DrawBlankLine(1);
+            bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 14, 0, "================================");
+            prntr.DrawBlankLine(2);
+            bufferRodape();
+            prntr.Output();
+            return 0;
+        } catch (GediException e) {
+            Log.e(TAG, "imprimirPedidoConsolidado error", e);
+            return -1;
         }
-
-        printer.scrollPaper(1);
-
-        String totalText = String.format(Locale.US, "TOTAL: R$ %.2f", total);
-        printer.printText(totalFmt, totalText);
-        printer.scrollPaper(1);
-
-        printer.printText(separatorFmt, "================================");
-        printer.scrollPaper(1);
-
-        String deliveryInfo = takeHome ? "PARA VIAGEM" : "PARA CONSUMIR NO LOCAL";
-        printer.printText(deliveryFmt, removerAcentos(deliveryInfo));
-        printer.scrollPaper(1);
-
-        printer.printText(separatorFmt, "================================");
-        printer.scrollPaper(2);
-
-        return imprimirRodape();
     }
 
     // endregion
 
     // region ─── Private Helpers ───────────────────────────────────────────────
 
-    private int imprimirRodape() {
+    private void bufferText(GEDI_PRNTR_e_Alignment align, boolean bold, boolean italic,
+                            boolean underline, int fontSize, int lineSpace, String text) throws GediException {
+        Paint paint = new Paint();
+        paint.setTextSize(fontSize);
+        paint.setFakeBoldText(bold);
+        paint.setUnderlineText(underline);
+        if (italic) paint.setTextSkewX(-0.25f);
+        switch (align) {
+            case CENTER: paint.setTextAlign(Paint.Align.CENTER); break;
+            case RIGHT:  paint.setTextAlign(Paint.Align.RIGHT);  break;
+            default:     paint.setTextAlign(Paint.Align.LEFT);   break;
+        }
+        prntr.DrawStringExt(new GEDI_PRNTR_st_StringConfig(paint, lineSpace, 0), text);
+    }
+
+    private void bufferRodape() throws GediException {
         String version = obterVersaoApp();
-        TextFormat footerFmt = buildTextFormat(Alignment.CENTER, true, 14);
-
-        printer.printText(footerFmt, "@eventflow v" + version);
-        printer.printText(footerFmt, "powered by @marraia");
-        printer.scrollPaper(5);
-        return 0;
+        bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 20, 0, "@eventflow v" + version);
+        bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, 20, 0, "powered by @marraia");
+        prntr.DrawBlankLine(5);
     }
 
-    private TextFormat buildTextFormat(Alignment alignment, boolean bold, int fontSize) {
-        TextFormat tf = new TextFormat();
-        tf.setAlignment(alignment);
-        tf.setBold(bold);
-        tf.setFontSize(fontSize);
-        return tf;
-    }
-
-    private Alignment toAlignment(int value) {
+    private GEDI_PRNTR_e_Alignment toAlignment(int value) {
         switch (value) {
-            case 1: return Alignment.CENTER;
-            case 2: return Alignment.RIGHT;
-            default: return Alignment.LEFT;
+            case 1: return GEDI_PRNTR_e_Alignment.CENTER;
+            case 2: return GEDI_PRNTR_e_Alignment.RIGHT;
+            default: return GEDI_PRNTR_e_Alignment.LEFT;
         }
     }
 
@@ -366,32 +365,35 @@ public class GertecPrinter implements Printer.Listener {
         return 14;
     }
 
-    private BarcodeType toBarcodeType(String typeStr) {
-        if (typeStr == null) return BarcodeType.CODE_128;
+    private GEDI_PRNTR_e_BarCodeType toBarcodeType(String typeStr) {
+        if (typeStr == null) return GEDI_PRNTR_e_BarCodeType.CODE_128;
         switch (typeStr) {
-            case "AZTEC": return BarcodeType.AZTEC;
-            case "CODABAR": return BarcodeType.CODABAR;
-            case "CODE_39": return BarcodeType.CODE_39;
-            case "CODE_93": return BarcodeType.CODE_93;
-            case "DATA_MATRIX": return BarcodeType.DATA_MATRIX;
-            case "EAN_8": return BarcodeType.EAN_8;
-            case "EAN_13": return BarcodeType.EAN_13;
-            case "ITF": return BarcodeType.ITF;
-            case "PDF_417": return BarcodeType.PDF_417;
-            case "QR_CODE": return BarcodeType.QR_CODE;
-            case "UPC_A": return BarcodeType.UPC_A;
-            case "UPC_E": return BarcodeType.UPC_E;
-            default: return BarcodeType.CODE_128;
+            case "AZTEC":       return GEDI_PRNTR_e_BarCodeType.AZTEC;
+            case "CODABAR":     return GEDI_PRNTR_e_BarCodeType.CODABAR;
+            case "CODE_39":     return GEDI_PRNTR_e_BarCodeType.CODE_39;
+            case "CODE_93":     return GEDI_PRNTR_e_BarCodeType.CODE_93;
+            case "DATA_MATRIX": return GEDI_PRNTR_e_BarCodeType.DATA_MATRIX;
+            case "EAN_8":       return GEDI_PRNTR_e_BarCodeType.EAN_8;
+            case "EAN_13":      return GEDI_PRNTR_e_BarCodeType.EAN_13;
+            case "ITF":         return GEDI_PRNTR_e_BarCodeType.ITF;
+            case "PDF_417":     return GEDI_PRNTR_e_BarCodeType.PDF_417;
+            case "QR_CODE":     return GEDI_PRNTR_e_BarCodeType.QR_CODE;
+            case "UPC_A":       return GEDI_PRNTR_e_BarCodeType.UPC_A;
+            case "UPC_E":       return GEDI_PRNTR_e_BarCodeType.UPC_E;
+            default:            return GEDI_PRNTR_e_BarCodeType.CODE_128;
         }
     }
 
-    private BarcodeFormat.Size toBarcodeSize(String sizeStr) {
-        if (sizeStr == null) return BarcodeFormat.Size.FULL_PAPER;
-        switch (sizeStr) {
-            case "SMALL": return BarcodeFormat.Size.SMALL;
-            case "HALF_PAPER": return BarcodeFormat.Size.HALF_PAPER;
-            default: return BarcodeFormat.Size.FULL_PAPER;
-        }
+    private int toBarcodeHeight(String sizeStr) {
+        if ("SMALL".equals(sizeStr)) return 60;
+        if ("HALF_PAPER".equals(sizeStr)) return 100;
+        return 150;
+    }
+
+    private int toBarcodeWidth(String sizeStr) {
+        if ("SMALL".equals(sizeStr)) return 200;
+        if ("HALF_PAPER".equals(sizeStr)) return 300;
+        return 0;
     }
 
     private String removerAcentos(String value) {
@@ -422,21 +424,6 @@ public class GertecPrinter implements Printer.Listener {
             Log.e(TAG, "obterVersaoApp failed", e);
             return "1.0";
         }
-    }
-
-    // endregion
-
-    // region ─── Printer.Listener ──────────────────────────────────────────────
-
-    @Override
-    public void onPrinterError(PrinterError printerError) {
-        Log.e(TAG, "onPrinterError id=" + printerError.getRequestId()
-                + " cause=" + printerError.getCause());
-    }
-
-    @Override
-    public void onPrinterSuccessful(int printerRequestId) {
-        Log.d(TAG, "onPrinterSuccessful id=" + printerRequestId);
     }
 
     // endregion

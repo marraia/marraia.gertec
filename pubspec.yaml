@@ -1,5 +1,5 @@
 name: gertec_tsg810_printer
-description: "Flutter plugin para impressora térmica Gertec TSG810."
+description: "Flutter plugin para a impressora térmica interna dos POS Gertec (GPOS800 / Smart G800), via GEDI."
 version: 0.0.1
 homepage:
 

@@ -9,6 +9,15 @@ class MethodChannelGertecTsg810Printer extends GertecTsg810PrinterPlatform {
   final methodChannel = const MethodChannel('gertec_tsg810_printer');
 
   @override
+  Future<bool> isAvailable() async {
+    try {
+      return await methodChannel.invokeMethod<bool>('isAvailable') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
   Future<int> printText(
     String text, {
     required GertecAlign align,

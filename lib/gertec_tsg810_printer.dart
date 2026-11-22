@@ -6,6 +6,12 @@ import 'src/gertec_types.dart';
 export 'src/gertec_types.dart';
 
 class GertecTsg810Printer {
+  /// true quando o aparelho é Gertec e a impressora interna (GEDI) inicializou.
+  /// Em outros aparelhos retorna false sem lançar erro.
+  Future<bool> isAvailable() {
+    return GertecTsg810PrinterPlatform.instance.isAvailable();
+  }
+
   Future<int> printText(
     String text, {
     GertecAlign align = GertecAlign.LEFT,

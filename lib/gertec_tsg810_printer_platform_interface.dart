@@ -17,6 +17,10 @@ abstract class GertecTsg810PrinterPlatform extends PlatformInterface {
     _instance = instance;
   }
 
+  Future<bool> isAvailable() {
+    throw UnimplementedError('isAvailable() has not been implemented.');
+  }
+
   Future<int> printText(
     String text, {
     required GertecAlign align,
