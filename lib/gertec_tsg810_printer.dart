@@ -80,6 +80,7 @@ class GertecTsg810Printer {
     required String data,
     String senha = "",
     required String imageUrl,
+    int? feedAfter,
   }) {
     return GertecTsg810PrinterPlatform.instance.printOrder(
       dados: dados,
@@ -89,6 +90,7 @@ class GertecTsg810Printer {
       data: data,
       senha: senha,
       imageUrl: imageUrl,
+      feedAfter: feedAfter,
     );
   }
 

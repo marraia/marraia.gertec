@@ -71,6 +71,7 @@ abstract class GertecTsg810PrinterPlatform extends PlatformInterface {
     required String data,
     required String senha,
     required String imageUrl,
+    int? feedAfter,
   }) {
     throw UnimplementedError('printOrder() has not been implemented.');
   }

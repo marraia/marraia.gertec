@@ -95,6 +95,7 @@ class MethodChannelGertecTsg810Printer extends GertecTsg810PrinterPlatform {
     required String data,
     required String senha,
     required String imageUrl,
+    int? feedAfter,
   }) async {
     final args = <String, dynamic>{
       'dados': dados,
@@ -104,6 +105,7 @@ class MethodChannelGertecTsg810Printer extends GertecTsg810PrinterPlatform {
       'data': data,
       'senha': senha,
       'imageUrl': imageUrl,
+      if (feedAfter != null) 'feedAfter': feedAfter,
     };
     return await methodChannel.invokeMethod<int>('printOrder', {'ticketArgs': args}) ?? -1;
   }

@@ -220,6 +220,11 @@ public class GertecPrinter {
         String data = (String) params.get("data");
         String senha = (String) params.get("senha");
         String imageUrl = (String) params.get("imageUrl");
+        // Avanço de papel no fim da ficha (pixels). Na impressão individual o app manda um avanço
+        // curto entre as fichas e o avanço até a serrilha só na última.
+        Object avancoParam = params.get("feedAfter");
+        int avanco = avancoParam instanceof Number && ((Number) avancoParam).intValue() > 0
+                ? ((Number) avancoParam).intValue() : AVANCO_CORTE;
 
         Log.d(TAG, "imprimirPedido dados=" + dados);
 
@@ -247,7 +252,7 @@ public class GertecPrinter {
             bufferSeparador();
             bufferText(GEDI_PRNTR_e_Alignment.CENTER, false, false, false, FONTE_NORMAL, 0, data);
             prntr.DrawBlankLine(ESPACO);
-            bufferRodape();
+            bufferRodape(avanco);
             prntr.Output();
             return 0;
         } catch (GediException e) {
@@ -316,7 +321,7 @@ public class GertecPrinter {
             prntr.DrawBlankLine(ESPACO);
             bufferSeparador();
             prntr.DrawBlankLine(ESPACO * 2);
-            bufferRodape();
+            bufferRodape(AVANCO_CORTE);
             prntr.Output();
             return 0;
         } catch (GediException e) {
@@ -441,12 +446,12 @@ public class GertecPrinter {
         prntr.DrawStringExt(new GEDI_PRNTR_st_StringConfig(paint, lineSpace, 0), text);
     }
 
-    private void bufferRodape() throws GediException {
+    private void bufferRodape(int avanco) throws GediException {
         String version = obterVersaoApp();
         bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, FONTE_RODAPE, 0, "@eventflow v" + version);
         bufferText(GEDI_PRNTR_e_Alignment.CENTER, true, false, false, FONTE_RODAPE, 0, "powered by @marraia");
         // Papel em branco até a serrilha: o cupom sai inteiro no corte
-        prntr.DrawBlankLine(AVANCO_CORTE);
+        prntr.DrawBlankLine(avanco);
     }
 
     private GEDI_PRNTR_e_Alignment toAlignment(int value) {
